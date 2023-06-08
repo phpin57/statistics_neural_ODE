@@ -1,0 +1,1 @@
+test de convergence : https://colab.research.google.com/drive/1eITDuguqZTpkuiJ7_2su0N2uG6kY0pOf?usp=sharing
