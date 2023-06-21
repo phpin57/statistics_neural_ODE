@@ -14,7 +14,7 @@ parser.add_argument('--method', type=str, choices=['dopri5', 'adams'], default='
 parser.add_argument('--data_size', type=int, default=1000)
 parser.add_argument('--batch_time', type=int, default=10)
 parser.add_argument('--batch_size', type=int, default=20)
-parser.add_argument('--niters', type=int, default=100000)
+parser.add_argument('--niters', type=int, default=3000)
 parser.add_argument('--test_freq', type=int, default=100)
 parser.add_argument('--viz', action='store_true')
 parser.add_argument('--gpu', type=int, default=0)
@@ -30,7 +30,7 @@ device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 
 
 true_y0 = torch.tensor([[2., 0.]]).to(device)
 t = torch.linspace(0., 1., args.data_size).to(device)
-true_A = torch.tensor([[1.,2.],[0.5,5.]]).to(device)
+true_A = torch.tensor([[1.,0.],[0.,5.]]).to(device)
 
 
 class Lambda(nn.Module):
@@ -156,7 +156,7 @@ if __name__ == '__main__':
 
     func = ODEFunc().to(device)
     
-    optimizer = optim.SGD(func.parameters(), lr=1e-1)
+    optimizer = optim.RMSprop(func.parameters(), lr=1e-3)
     end = time.time()
 
     time_meter = RunningAverageMeter(0.97)
