@@ -3,6 +3,7 @@ import argparse
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.linalg import expm
 
 
 import torch
@@ -28,10 +29,14 @@ else:
 
 device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
 
-true_y0 = torch.tensor([[2., 0.]]).to(device)
+true_y0 = torch.tensor([[2., 1.]]).to(device)
 t = torch.linspace(0., 1., args.data_size).to(device)
-true_A = torch.tensor([[1.,2.],[0.5,5.]]).to(device)
-
+A = torch.tensor([[1.,0.],[0.,5.]]).to(device)
+P=torch.randn(2,2)
+P_inv=torch.inverse(P)
+true_A=P_inv@A@P
+true_B=torch.matrix_exp(true_A)
+print(true_B)
 
 class Lambda(nn.Module):
 
@@ -125,7 +130,9 @@ class ODEFunc(nn.Module):
             if isinstance(m, nn.Linear):
                 nn.init.normal_(m.weight, mean=0, std=0.1)
                 nn.init.constant_(m.bias, val=0)
-
+        print("ODEFunc initialized.")
+        print("A_eq ",[param.detach().numpy() for param in self.net.parameters()][0])
+    
     def forward(self, t, y):
         return self.net(y)
 
@@ -156,7 +163,7 @@ if __name__ == '__main__':
 
     func = ODEFunc().to(device)
     
-    optimizer = optim.SGD(func.parameters(), lr=1e-1)
+    optimizer = optim.RMSprop(func.parameters(), lr=1e-3)
     end = time.time()
 
     time_meter = RunningAverageMeter(0.97)
@@ -194,3 +201,6 @@ if __name__ == '__main__':
     plt.ylabel('Loss')
     plt.title('Training Loss')
     plt.show()
+    
+    print(expm([param.detach().numpy() for param in func.parameters()][0]))
+    print("A_eq ",[param.detach().numpy() for param in func.parameters()][0])

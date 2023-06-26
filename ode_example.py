@@ -3,6 +3,8 @@ import argparse
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
+from scipy.linalg import expm
 
 
 import torch
@@ -11,9 +13,9 @@ import torch.optim as optim
 
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str, choices=['dopri5', 'adams'], default='dopri5')
-parser.add_argument('--data_size', type=int, default=1000)
+parser.add_argument('--data_size', type=int, default=50)
 parser.add_argument('--batch_time', type=int, default=10)
-parser.add_argument('--batch_size', type=int, default=2)
+parser.add_argument('--batch_size', type=int, default=5)
 parser.add_argument('--niters', type=int, default=10000)
 parser.add_argument('--test_freq', type=int, default=100)
 parser.add_argument('--viz', action='store_true')
@@ -28,15 +30,24 @@ else:
 
 device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
 
-true_y0 = torch.tensor([[2., 0.], [3., 1.], [1., 4.], [5., 2.], [0., 3.], [2., 2.], [4., 1.], [1., 1.], [3., 3.], [2., 4.]]).to(device)
+true_y0 = torch.randn(args.data_size, 2).to(device)
 t = torch.tensor([0.,1.]).to(device)  # batch_t = [0, 1]
-true_B = torch.tensor([[1.,0.],[0.,2.]]).to(device)
+B = torch.tensor([[1.,0.],[0.,2.]]).to(device)
+P=torch.randn(2,2)
+P_inv=torch.inverse(P)
+true_B=P_inv@B@P
 true_y1=torch.mm(true_y0,true_B)
 
 
 def makedirs(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
+
+def get_batch():
+    s = torch.from_numpy(np.random.choice(np.arange(args.data_size - args.batch_time, dtype=np.int64), args.batch_size, replace=False))
+    batch_y0 = true_y0[s]  # (M, D)
+    batch_y = true_y1[s]  # (T, M, D)
+    return batch_y0.to(device), t.to(device), batch_y.to(device)
 
 
 if args.viz:
@@ -108,7 +119,10 @@ class ODEFunc(nn.Module):
             if isinstance(m, nn.Linear):
                 nn.init.normal_(m.weight, mean=0, std=0.1)
                 nn.init.constant_(m.bias, val=0)
-
+        self.A_init=[param.detach().numpy() for param in self.net.parameters()][0]
+        print("ODEFunc initialized.")
+        print("A_init ",self.A_init)
+  
     def forward(self, t, y):
         return self.net(y)
 
@@ -139,20 +153,18 @@ if __name__ == '__main__':
 
     func = ODEFunc().to(device)
     
-    optimizer = optim.RMSprop(func.parameters(), lr=1e-3)
+    optimizer = optim.SGD(func.parameters(), lr=1e-3)
     end = time.time()
 
     time_meter = RunningAverageMeter(0.97)
     
     loss_meter = RunningAverageMeter(0.97)
-    batch_y0, batch_t, batch_y = true_y0.to(device), t.to(device), true_y1.to(device)
+    #batch_y0, batch_t, batch_y = true_y0.to(device), t.to(device), true_y1.to(device)
     for itr in range(1, args.niters + 1):
         optimizer.zero_grad()
-        
+        batch_y0, batch_t, batch_y = get_batch()
         pred_y = odeint(func, batch_y0, batch_t).to(device)
         loss = torch.mean((pred_y - batch_y)**2)
-        
-        
         
         loss.backward()
         optimizer.step()
@@ -163,9 +175,10 @@ if __name__ == '__main__':
         if itr % args.test_freq == 0:
             loss_values.append(loss.item())
             with torch.no_grad():
-                pred_y = odeint(func, true_y0, t)
+                #pred_y = odeint(func, true_y0, t)
                 #loss = torch.mean(torch.abs(pred_y - true_y))
-                print('Iter {:04d} | Total Loss {:.6f}'.format(itr, loss.item()))
+                exp_A=expm([param.detach().numpy() for param in func.parameters()][0])
+                print('Iter {:04d} | frob loss {:.6f}'.format(itr, scipy.linalg.norm(exp_A-np.array(true_B))))
                 #visualize(true_y, pred_y, func, ii)
                 ii += 1
 
@@ -177,3 +190,6 @@ if __name__ == '__main__':
     plt.ylabel('Loss')
     plt.title('Training Loss')
     plt.show()
+    A_eq=[param.detach().numpy() for param in func.parameters()][0]
+    print("A_eq ",A_eq)
+    print("exp(A_eq)",expm(A_eq))
