@@ -16,7 +16,7 @@ parser.add_argument('--method', type=str, choices=['dopri5', 'adams'], default='
 parser.add_argument('--data_size', type=int, default=50)
 parser.add_argument('--batch_time', type=int, default=10)
 parser.add_argument('--batch_size', type=int, default=5)
-parser.add_argument('--niters', type=int, default=10000)
+parser.add_argument('--niters', type=int, default=20000)
 parser.add_argument('--test_freq', type=int, default=100)
 parser.add_argument('--viz', action='store_true')
 parser.add_argument('--gpu', type=int, default=0)
@@ -32,12 +32,19 @@ device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 
 
 true_y0 = torch.randn(args.data_size, 2).to(device)
 t = torch.tensor([0.,1.]).to(device)  # batch_t = [0, 1]
-B = torch.tensor([[1.,0.],[0.,2.]]).to(device)
-P=torch.randn(2,2)
-P_inv=torch.inverse(P)
-true_B=P_inv@B@P
-true_y1=torch.mm(true_y0,true_B)
 
+sqt_2=float(np.sqrt(2.))
+true_B = torch.tensor([[0.,0.],[0.,3.]])
+
+non_diag=True
+
+if non_diag:
+    B=true_B.clone()
+    P=torch.tensor([[sqt_2,-sqt_2],[sqt_2,sqt_2]]).to(device)
+    P_inv=torch.inverse(P)
+    true_B=P_inv@B@P
+true_y1=torch.mm(true_y0,true_B)
+print(true_B)
 
 def makedirs(dirname):
     if not os.path.exists(dirname):
@@ -153,7 +160,7 @@ if __name__ == '__main__':
 
     func = ODEFunc().to(device)
     
-    optimizer = optim.SGD(func.parameters(), lr=1e-3)
+    optimizer = optim.SGD(func.parameters(), lr=1e-2)
     end = time.time()
 
     time_meter = RunningAverageMeter(0.97)
@@ -173,14 +180,16 @@ if __name__ == '__main__':
         loss_meter.update(loss.item())
 
         if itr % args.test_freq == 0:
-            loss_values.append(loss.item())
-            with torch.no_grad():
-                #pred_y = odeint(func, true_y0, t)
-                #loss = torch.mean(torch.abs(pred_y - true_y))
-                exp_A=expm([param.detach().numpy() for param in func.parameters()][0])
-                print('Iter {:04d} | frob loss {:.6f}'.format(itr, scipy.linalg.norm(exp_A-np.array(true_B))))
-                #visualize(true_y, pred_y, func, ii)
-                ii += 1
+            exp_A=expm([param.detach().numpy() for param in func.parameters()][0])
+            frob_loss=scipy.linalg.norm(exp_A-np.array(true_B))
+            loss_values.append(frob_loss)
+            #pred_y = odeint(func, true_y0, t)
+            #loss = torch.mean(torch.abs(pred_y - true_y))
+            print('Iter {:04d} | frob loss {:.6f}'.format(itr, frob_loss))
+            #visualize(true_y, pred_y, func, ii)
+            if frob_loss < 1e-4:
+                break
+            ii += 1
 
         end = time.time()
         
