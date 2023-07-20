@@ -35,19 +35,21 @@ true_y0 = torch.randn(args.data_size, 2).to(device)
 t = torch.tensor([0.,1.]).to(device)  # batch_t = [0, 1]
 
 
-doubled=True
+doubled=True #indicates if we use the doubled parametrization
 sqt_2=float(np.sqrt(2.))
-true_B = torch.tensor([[-2.,0.],[0.,3.]])
-non_diag=True
+true_B = torch.tensor([[-2.,0.],[0.,3.]]) #jordan block that we want to learn
+non_diag=True #to transform B into a non diagonal matrix
 dim=true_B.shape[0]
 
 if non_diag:
     B=true_B.clone()
-    #matrice de rotation pour change
-    P=torch.tensor([[sqt_2,-sqt_2],[sqt_2,sqt_2]]).to(device) 
+    #rotation matrix for change of basis
+    #P=torch.tensor([[sqt_2,-sqt_2],[sqt_2,sqt_2]]).to(device)
+    #transition matrix P without any particular form
+    P=torch.tensor([[1.,-2.],[3.,5.]]).to(device) 
     P_inv=torch.inverse(P)
     true_B=P_inv@B@P
-true_y1=torch.mm(true_y0,true_B)
+true_y1=torch.mm(true_y0,true_B) #calculates the y_i
 print(true_B)
 
 
@@ -57,6 +59,13 @@ b_values=scipy.linalg.eig(true_B)
 def makedirs(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
+        
+"""
+get_batch is a function that takes args.batch_size samples among
+args.data_size data (x_i,y_i). Here we choose to have batch_size=data_size
+to calculate an authentic gradient descent and not a SGD
+
+"""
 
 def get_batch(true_y0,true_y1):
     s = torch.from_numpy(np.random.choice(np.arange(args.data_size - args.batch_time, dtype=np.int64), args.batch_size))
@@ -76,6 +85,10 @@ if args.viz:
     ax_vecfield = fig.add_subplot(133, frameon=False)
     plt.show(block=False)
 
+
+"""
+plot_eigvals plots the complex eigenvalues in a 3 dimension space
+"""
 
 def plot_eigvals(values,targets,save):
     m=len(values[0])
@@ -133,7 +146,9 @@ def plot_eigvals(values,targets,save):
         plt.savefig('plot.png', dpi=1200)
     plt.show()
 
-
+"""
+augmente_tensor creates the new augmented data 
+"""
 
 def augmente_tensor(x):
     n = x.shape[0]  # Number of tensors in x
@@ -162,6 +177,11 @@ def augmente_tensor(x):
     final_tensor = torch.stack(result_tensors, dim=0)  # Stack all tensors into a single tensor
 
     return final_tensor
+
+
+"""
+augmente_B creates diag(B,B) out of B
+"""
 
 
 def augmente_B(B):
@@ -224,9 +244,8 @@ class ODEFunc(nn.Module):
         super(ODEFunc, self).__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(nb_layers, nb_layers,bias=False),
-            #nn.Tanh(),
-            #nn.Linear(10, 2,bias=False),
+            #we set the bias to false for our setting
+            nn.Linear(nb_layers, nb_layers,bias=False), 
         )
 
         for m in self.net.modules():
