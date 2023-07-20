@@ -270,7 +270,7 @@ if __name__ == '__main__':
         b_values=scipy.linalg.eig(true_B)
     func = ODEFunc(dim).to(device)
     
-    optimizer = optim.SGD(func.parameters(), lr=1e-1)
+    optimizer = optim.SGD(func.parameters(), lr=1e-3)
     end = time.time()
 
     time_meter = RunningAverageMeter(0.97)
